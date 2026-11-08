@@ -1,0 +1,8 @@
+[server]
+# Gör att mappen src/static serveras (ljudbitarna hämtas därifrån av spelaren)
+enableStaticServing = true
+# Bara den här datorn når appen. Ändra till "0.0.0.0" om du vill nå den från mobilen.
+address = "127.0.0.1"
+
+[browser]
+gatherUsageStats = false

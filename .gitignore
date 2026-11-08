@@ -26,3 +26,6 @@ pdf_in/*.pdf
 
 # Röstmodeller (stora filer, hämtas separat)
 models/
+
+# Genererade ljudbitar från dina PDF-filer
+src/static/

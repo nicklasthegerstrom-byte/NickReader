@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f3f4f6; --text: #1f2937; --muted: #6b7280;
+    --accent: #2563eb; --accent-text: #ffffff; --active-bg: #dbeafe; --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1117; --panel: #1a1f2b; --text: #e5e7eb; --muted: #9ca3af;
+      --accent: #3b82f6; --accent-text: #ffffff; --active-bg: #1e3a5f; --warn: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 4px; background: var(--bg); color: var(--text);
+         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .now { background: var(--panel); border-radius: 12px; padding: 20px 24px;
+         font-size: 1.35rem; line-height: 1.5; min-height: 110px; }
+  .controls { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; }
+  button { border: 0; border-radius: 10px; background: var(--panel); color: var(--text);
+           font-size: 1.2rem; width: 48px; height: 44px; cursor: pointer; }
+  button.main { background: var(--accent); color: var(--accent-text); width: 64px; }
+  button:hover { filter: brightness(1.08); }
+  select { background: var(--panel); color: var(--text); border: 0; border-radius: 8px;
+           padding: 8px; font-size: 0.95rem; margin-left: auto; }
+  .time { color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums;
+          min-width: 150px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 6px 0 4px; }
+  .status { height: 1.3em; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+  .status.warn { color: var(--warn); }
+  .list { height: 300px; overflow-y: auto; border-radius: 12px; background: var(--panel);
+          padding: 8px; }
+  .s { padding: 8px 12px; border-radius: 8px; cursor: pointer; line-height: 1.45;
+       color: var(--muted); }
+  .s:hover { background: rgba(127,127,127,0.12); }
+  .s.pending { opacity: 0.4; cursor: default; }
+  .s.active { background: var(--active-bg); color: var(--text); }
+  .hint { color: var(--muted); font-size: 0.8rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <div class="now" id="now"></div>
+
+  <div class="controls">
+    <button id="prev" title="Föregående mening (←)">⏮</button>
+    <button id="play" class="main" title="Spela/pausa (mellanslag)">▶</button>
+    <button id="next" title="Nästa mening (→)">⏭</button>
+    <span class="time" id="time">0:00 / 0:00</span>
+    <select id="speed" title="Hastighet">
+      <option value="0.75">0,75×</option>
+      <option value="1" selected>1×</option>
+      <option value="1.25">1,25×</option>
+      <option value="1.5">1,5×</option>
+      <option value="2">2×</option>
+    </select>
+  </div>
+
+  <input type="range" id="seek" min="0" max="1000" value="0">
+  <div class="status" id="status"></div>
+  <div class="list" id="list"></div>
+  <div class="hint">Mellanslag = spela/pausa · ← → = mening bakåt/framåt · klicka på en mening för att hoppa dit</div>
+
+<script>
+  const init = __DATA__;            // { baseUrl, sentences }
+  const S = init.sentences;
+  const audio = new Audio();
+  audio.preload = "auto";
+  const $ = (id) => document.getElementById(id);
+  const RESTART_THRESHOLD = 1.5;    // sekunder
+
+  let chunks = [];                  // färdiga ljudbitar enligt manifest.json
+  let totalChunks = 0;
+  let status = "generating";        // generating | done | error
+  let errorText = "";
+  let cur = -1;                     // vilken bit som är inladdad (index i chunks)
+  let wantPlay = false;             // användaren vill att det ska spela
+  let waiting = false;              // väntar på att nästa bit blir klar
+  let pendingSeek = null;           // tid att hoppa till när biten har laddats
+  let rate = 1;
+  let activeIndex = -1;
+  let readyCount = 0;               // antal meningar som har ljud
+  let dragging = false;
+
+  // ---------- Meningslistan (textContent, aldrig innerHTML) ----------
+  const rows = S.map((text, i) => {
+    const el = document.createElement("div");
+    el.className = "s pending";
+    el.textContent = text;
+    el.addEventListener("click", () => { if (i < readyCount) { wantPlay = true; seekSentence(i); } });
+    $("list").appendChild(el);
+    return el;
+  });
+  $("now").textContent = S[0] || "";
+
+  // ---------- Hjälpfunktioner ----------
+  const fmt = (s) => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+  const chunkOf = (g) => chunks.findIndex((c) => g >= c.first && g < c.first + c.count);
+
+  function currentSentence() {
+    if (cur < 0) return 0;
+    const c = chunks[cur], t = audio.currentTime;
+    let i = 0;
+    for (let k = 0; k < c.starts.length; k++) { if (c.starts[k] <= t + 0.001) i = k; else break; }
+    return c.first + i;
+  }
+
+  function elapsed() {
+    if (cur < 0) return 0;
+    let sum = 0;
+    for (let k = 0; k < cur; k++) sum += chunks[k].duration;
+    return sum + audio.currentTime;
+  }
+
+  // ---------- Ladda och hoppa ----------
+  function loadChunk(index, localTime) {
+    cur = index;
+    pendingSeek = localTime;
+    waiting = false;
+    audio.src = init.baseUrl + chunks[index].file;
+    audio.defaultPlaybackRate = rate;
+    audio.playbackRate = rate;
+    audio.load();
+  }
+
+  audio.addEventListener("loadedmetadata", () => {
+    if (pendingSeek !== null) { audio.currentTime = pendingSeek; pendingSeek = null; }
+    if (wantPlay) audio.play().catch(() => {});
+    render();
+  });
+
+  function seekSentence(g) {
+    const ci = chunkOf(g);
+    if (ci < 0) return;                       // inte klar än
+    const local = chunks[ci].starts[g - chunks[ci].first];
+    if (ci === cur) {
+      audio.currentTime = local;
+      if (wantPlay && audio.paused) audio.play().catch(() => {});
+    } else {
+      loadChunk(ci, local);
+    }
+    render();
+  }
+
+  function prev() {
+    const g = currentSentence();
+    const start = cur >= 0 ? chunks[cur].starts[g - chunks[cur].first] : 0;
+    if (cur >= 0 && audio.currentTime - start > RESTART_THRESHOLD || g === 0) seekSentence(g);
+    else seekSentence(g - 1);
+  }
+
+  function next() {
+    const g = currentSentence();
+    if (g + 1 < S.length) seekSentence(g + 1);
+  }
+
+  function toggle() {
+    if (wantPlay) {                           // pausa
+      wantPlay = false; waiting = false; audio.pause();
+    } else {                                  // spela
+      wantPlay = true;
+      if (cur < 0) { if (chunks.length) loadChunk(0, 0); else waiting = true; }
+      else if (audio.ended) seekSentence(0);
+      else audio.play().catch(() => {});
+    }
+    render();
+  }
+
+  audio.addEventListener("ended", () => {
+    if (cur + 1 < chunks.length) loadChunk(cur + 1, 0);
+    else if (status === "done") { wantPlay = false; }
+    else waiting = true;                      // nästa bit görs fortfarande
+    render();
+  });
+
+  // ---------- Rendering ----------
+  function render() {
+    const g = currentSentence();
+    if (g !== activeIndex) {
+      if (activeIndex >= 0) rows[activeIndex].classList.remove("active");
+      rows[g].classList.add("active");
+      $("now").textContent = S[g];
+      const list = $("list"), el = rows[g];
+      list.scrollTop = el.offsetTop - list.offsetTop - list.clientHeight / 2 + el.clientHeight / 2;
+      activeIndex = g;
+    }
+    let total = 0; chunks.forEach((c) => { total += c.duration; });
+    $("time").textContent = fmt(elapsed()) + " / " + fmt(total) + (status === "done" ? "" : "+");
+    if (!dragging && S.length > 1) $("seek").value = Math.round((g / (S.length - 1)) * 1000);
+    $("play").textContent = wantPlay ? "⏸" : "▶";
+
+    const st = $("status");
+    st.classList.toggle("warn", status === "error" || waiting);
+    if (status === "error") st.textContent = "Fel vid ljudgenerering: " + errorText;
+    else if (waiting || (wantPlay && cur < 0)) st.textContent = "Väntar på att ljudet ska bli klart…";
+    else if (status === "generating" && chunks.length === 0) st.textContent = "Gör första biten ljud…";
+    else if (status === "generating") st.textContent = "Gör ljud: " + chunks.length + " av " + totalChunks + " bitar klara. Du kan lyssna redan nu.";
+    else st.textContent = "";
+  }
+
+  function updateReady() {
+    const last = chunks.length ? chunks[chunks.length - 1] : null;
+    readyCount = last ? last.first + last.count : 0;
+    rows.forEach((el, i) => el.classList.toggle("pending", i >= readyCount));
+  }
+
+  // ---------- Hämta manifestet tills allt är klart ----------
+  async function poll() {
+    try {
+      const r = await fetch(init.baseUrl + "manifest.json?" + Date.now(), { cache: "no-store" });
+      if (r.ok) {
+        const m = await r.json();
+        chunks = m.chunks; totalChunks = m.total_chunks; status = m.status; errorText = m.error || "";
+        updateReady();
+        if (wantPlay && cur < 0 && chunks.length) loadChunk(0, 0);
+        else if (waiting && cur + 1 < chunks.length) loadChunk(cur + 1, 0);
+      }
+    } catch (e) { /* försök igen */ }
+    render();
+    if (status === "generating") setTimeout(poll, 1000);
+  }
+
+  // ---------- Kontroller ----------
+  $("seek").addEventListener("input", () => { dragging = true; });
+  $("seek").addEventListener("change", () => {
+    dragging = false;
+    let g = Math.round(($("seek").value / 1000) * (S.length - 1));
+    g = Math.min(g, readyCount - 1);          // inte längre än det som är klart
+    if (g >= 0) seekSentence(g);
+    render();
+  });
+  $("prev").addEventListener("click", prev);
+  $("next").addEventListener("click", next);
+  $("play").addEventListener("click", toggle);
+  $("speed").addEventListener("change", () => {
+    rate = parseFloat($("speed").value);
+    audio.defaultPlaybackRate = rate; audio.playbackRate = rate;
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "SELECT") return;
+    if (e.code === "Space") { e.preventDefault(); toggle(); }
+    else if (e.code === "ArrowLeft") { e.preventDefault(); prev(); }
+    else if (e.code === "ArrowRight") { e.preventDefault(); next(); }
+  });
+  audio.addEventListener("seeked", render);
+  (function loop() { if (!audio.paused) render(); requestAnimationFrame(loop); })();
+  window.addEventListener("pagehide", () => audio.pause());
+
+  render();
+  poll();
+</script>
+</body>
+</html>
