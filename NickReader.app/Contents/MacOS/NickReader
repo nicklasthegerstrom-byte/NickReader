@@ -1,0 +1,36 @@
+#!/bin/bash
+# Startar NickReader och öppnar den i webbläsaren. Körs den redan öppnas bara sidan.
+# Stäng ned appen med knappen "Stäng ned NickReader" längst ned på sidan.
+
+PORT=8600
+URL="http://127.0.0.1:$PORT"
+LOG="$HOME/Library/Logs/NickReader.log"
+
+# Projektmappen är mappen som innehåller NickReader.app. Har appen flyttats
+# används ~/code/NickReader.
+APP_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+if [ -f "$APP_DIR/src/app.py" ]; then PROJECT="$APP_DIR"; else PROJECT="$HOME/code/NickReader"; fi
+
+alert() { osascript -e "display dialog \"$1\" buttons {\"OK\"} default button \"OK\" with icon caution with title \"NickReader\"" >/dev/null 2>&1; }
+
+healthy() { curl -s -o /dev/null --max-time 2 "$URL/_stcore/health"; }
+
+if ! healthy; then
+  if [ ! -x "$PROJECT/.venv/bin/streamlit" ]; then
+    alert "Hittar inte .venv i $PROJECT. Följ installationen i README.md."
+    exit 1
+  fi
+  cd "$PROJECT" || exit 1
+  nohup "$PROJECT/.venv/bin/streamlit" run "$PROJECT/src/app.py" \
+    --server.headless true --server.port "$PORT" >> "$LOG" 2>&1 &
+  disown
+  for _ in $(seq 1 60); do healthy && break; sleep 1; done
+  if ! healthy; then
+    alert "NickReader startade inte. Se loggen: $LOG"
+    exit 1
+  fi
+fi
+
+# NICKREADER_NO_OPEN används bara för tester
+[ -z "$NICKREADER_NO_OPEN" ] && open "$URL"
+exit 0

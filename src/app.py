@@ -6,6 +6,9 @@ Starta från projektmappen:
 
 import base64
 import json
+import os
+import signal
+import time
 from pathlib import Path
 
 import streamlit as st
@@ -63,6 +66,18 @@ def load_logo() -> str:
     return "data:image/png;base64," + encoded
 
 
+def shutdown_footer() -> None:
+    """Knapp längst ned som stänger ned appen, så att den inte körs i bakgrunden i onödan."""
+    st.divider()
+    if st.button("⏻ Stäng ned NickReader"):
+        st.info(
+            "NickReader stängs ned. Du kan stänga den här fliken. "
+            "Felmeddelandet om anslutning som visas strax är normalt."
+        )
+        time.sleep(1)  # ger webbläsaren tid att visa meddelandet
+        os.kill(os.getpid(), signal.SIGTERM)
+
+
 def render_reader(info: dict) -> None:
     """Visar spelaren (HTML och JavaScript) som hämtar ljudbitarna medan de görs."""
     payload = {"baseUrl": info["base_url"], "sentences": info["sentences"], "icons": load_icons()}
@@ -83,6 +98,7 @@ pdf_files = sorted(PDF_DIR.glob("*.pdf"))
 
 if not pdf_files:
     st.info(f"Lägg en PDF-fil i mappen `{PDF_DIR}` och ladda om sidan.")
+    shutdown_footer()
     st.stop()
 
 left, right = st.columns([3, 1])
@@ -103,3 +119,5 @@ elif st.session_state.get("info"):
     info = st.session_state["info"]
     st.caption(f"{st.session_state['info_name']} · {len(info['sentences'])} meningar")
     render_reader(info)
+
+shutdown_footer()
