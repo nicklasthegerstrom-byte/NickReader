@@ -5,49 +5,81 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
-    --bg: #ffffff; --panel: #f3f4f6; --text: #1f2937; --muted: #6b7280;
-    --accent: #2563eb; --accent-text: #ffffff; --active-bg: #dbeafe; --warn: #b45309;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0e1117; --panel: #1a1f2b; --text: #e5e7eb; --muted: #9ca3af;
-      --accent: #3b82f6; --accent-text: #ffffff; --active-bg: #1e3a5f; --warn: #fbbf24;
-    }
+    --ink: #111111; --orange: #F7941D; --orange-soft: #FFD08A; --cream: #FFF8EC;
+    --grey: #6b6f76; --paper: #ffffff; --warn: #b45309;
+    --round: "Arial Rounded MT Bold", "Avenir Next Rounded", "Trebuchet MS", system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 0 4px; background: var(--bg); color: var(--text);
+  body { margin: 0; padding: 6px 8px 10px; background: transparent; color: var(--ink);
          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-  .now { background: var(--panel); border-radius: 12px; padding: 20px 24px;
-         font-size: 1.35rem; line-height: 1.5; min-height: 110px; }
-  .controls { display: flex; align-items: center; gap: 10px; margin: 14px 0 6px; }
-  button { border: 0; border-radius: 10px; background: var(--panel); color: var(--text);
-           font-size: 1.2rem; width: 48px; height: 44px; cursor: pointer; }
-  button.main { background: var(--accent); color: var(--accent-text); width: 64px; }
-  button:hover { filter: brightness(1.08); }
-  select { background: var(--panel); color: var(--text); border: 0; border-radius: 8px;
-           padding: 8px; font-size: 0.95rem; margin-left: auto; }
-  .time { color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums;
-          min-width: 150px; }
-  input[type=range] { width: 100%; accent-color: var(--accent); margin: 6px 0 4px; }
-  .status { height: 1.3em; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+
+  /* Rutan med meningen som läses */
+  .now { background: var(--paper); border: 3px solid var(--ink); border-radius: 20px;
+         box-shadow: 0 6px 0 var(--ink); padding: 20px 24px; min-height: 120px;
+         font-size: 1.4rem; line-height: 1.5; font-weight: 600; }
+
+  /* Knapparna är bilder */
+  .controls { display: flex; align-items: center; justify-content: center; gap: 14px;
+              margin: 22px 0 10px; }
+  button.ic { background: none; border: 0; padding: 0; cursor: pointer; line-height: 0;
+              transition: transform .1s; }
+  button.ic img { height: 56px; width: auto; display: block; pointer-events: none; }
+  button.ic.main img { height: 70px; }
+  button.ic:hover { transform: rotate(-4deg) scale(1.08); }
+  button.ic:active { transform: translateY(3px) scale(0.96); }
+  button.ic:focus-visible { outline: 3px dashed var(--ink); outline-offset: 4px; border-radius: 12px; }
+
+  .meta { display: flex; align-items: center; justify-content: space-between; margin: 4px 2px 0; }
+  select { border: 3px solid var(--ink); border-radius: 12px; background: var(--paper);
+           color: var(--ink); padding: 6px 8px; font-size: 0.95rem; font-weight: 700;
+           font-family: var(--round); cursor: pointer; }
+  .time { font-family: var(--round); font-size: 1rem; color: var(--grey);
+          font-variant-numeric: tabular-nums; }
+
+  /* Tidslinje */
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 26px;
+                      background: transparent; margin: 8px 0 2px; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 14px; border: 3px solid var(--ink); border-radius: 10px;
+    background: linear-gradient(to right, var(--orange) var(--p, 0%), var(--paper) var(--p, 0%)); }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 26px; height: 26px; margin-top: -9px; border-radius: 50%;
+    background: var(--orange); border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); }
+  input[type=range]::-moz-range-track {
+    height: 14px; border: 3px solid var(--ink); border-radius: 10px;
+    background: linear-gradient(to right, var(--orange) var(--p, 0%), var(--paper) var(--p, 0%)); }
+  input[type=range]::-moz-range-thumb {
+    width: 20px; height: 20px; border-radius: 50%; background: var(--orange);
+    border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); }
+
+  .status { min-height: 1.4em; font-family: var(--round); font-size: 0.85rem; color: var(--grey);
+            margin: 4px 2px 8px; }
   .status.warn { color: var(--warn); }
-  .list { height: 300px; overflow-y: auto; border-radius: 12px; background: var(--panel);
-          padding: 8px; }
-  .s { padding: 8px 12px; border-radius: 8px; cursor: pointer; line-height: 1.45;
-       color: var(--muted); }
-  .s:hover { background: rgba(127,127,127,0.12); }
-  .s.pending { opacity: 0.4; cursor: default; }
-  .s.active { background: var(--active-bg); color: var(--text); }
-  .hint { color: var(--muted); font-size: 0.8rem; margin-top: 8px; }
+
+  /* Meningslistan */
+  .list { height: 300px; overflow-y: auto; background: var(--paper); border: 3px solid var(--ink);
+          border-radius: 20px; padding: 8px; box-shadow: 0 6px 0 var(--ink); }
+  .s { padding: 9px 14px; border-radius: 12px; cursor: pointer; line-height: 1.45; color: #4b4f56;
+       border: 2px solid transparent; }
+  .s:hover { background: var(--cream); }
+  .s.pending { opacity: 0.38; cursor: default; }
+  .s.pending:hover { background: transparent; }
+  .s.active { background: var(--orange-soft); color: var(--ink); font-weight: 600;
+              border-color: var(--ink); }
+  .hint { color: var(--grey); font-size: 0.8rem; margin: 14px 2px 0; }
 </style>
 </head>
 <body>
   <div class="now" id="now"></div>
 
   <div class="controls">
-    <button id="prev" title="Föregående mening (←)">⏮</button>
-    <button id="play" class="main" title="Spela/pausa (mellanslag)">▶</button>
-    <button id="next" title="Nästa mening (→)">⏭</button>
+    <button class="ic" id="prev" title="Föregående mening (←)"><img id="img-prev" alt="Bakåt"></button>
+    <button class="ic main" id="play" title="Spela/pausa (mellanslag)"><img id="img-play" alt="Spela"></button>
+    <button class="ic" id="stop" title="Stopp, tillbaka till början"><img id="img-stop" alt="Stopp"></button>
+    <button class="ic" id="next" title="Nästa mening (→)"><img id="img-next" alt="Framåt"></button>
+  </div>
+
+  <div class="meta">
     <span class="time" id="time">0:00 / 0:00</span>
     <select id="speed" title="Hastighet">
       <option value="0.75">0,75×</option>
@@ -64,8 +96,9 @@
   <div class="hint">Mellanslag = spela/pausa · ← → = mening bakåt/framåt · klicka på en mening för att hoppa dit</div>
 
 <script>
-  const init = __DATA__;            // { baseUrl, sentences }
+  const init = __DATA__;            // { baseUrl, sentences, icons }
   const S = init.sentences;
+  const ICONS = init.icons;
   const audio = new Audio();
   audio.preload = "auto";
   const $ = (id) => document.getElementById(id);
@@ -83,6 +116,12 @@
   let activeIndex = -1;
   let readyCount = 0;               // antal meningar som har ljud
   let dragging = false;
+
+  // Knappbilderna
+  $("img-prev").src = ICONS.prev;
+  $("img-stop").src = ICONS.stop;
+  $("img-next").src = ICONS.next;
+  $("img-play").src = ICONS.play;
 
   // ---------- Meningslistan (textContent, aldrig innerHTML) ----------
   const rows = S.map((text, i) => {
@@ -168,6 +207,12 @@
     render();
   }
 
+  function stop() {                           // pausa och gå tillbaka till början
+    wantPlay = false; waiting = false; audio.pause();
+    if (cur >= 0) seekSentence(0);
+    render();
+  }
+
   audio.addEventListener("ended", () => {
     if (cur + 1 < chunks.length) loadChunk(cur + 1, 0);
     else if (status === "done") { wantPlay = false; }
@@ -188,8 +233,13 @@
     }
     let total = 0; chunks.forEach((c) => { total += c.duration; });
     $("time").textContent = fmt(elapsed()) + " / " + fmt(total) + (status === "done" ? "" : "+");
-    if (!dragging && S.length > 1) $("seek").value = Math.round((g / (S.length - 1)) * 1000);
-    $("play").textContent = wantPlay ? "⏸" : "▶";
+    if (!dragging && S.length > 1) {
+      const value = Math.round((g / (S.length - 1)) * 1000);
+      $("seek").value = value;
+      $("seek").style.setProperty("--p", (value / 10) + "%");
+    }
+    $("img-play").src = wantPlay ? ICONS.pause : ICONS.play;
+    $("img-play").alt = wantPlay ? "Pausa" : "Spela";
 
     const st = $("status");
     st.classList.toggle("warn", status === "error" || waiting);
@@ -223,7 +273,10 @@
   }
 
   // ---------- Kontroller ----------
-  $("seek").addEventListener("input", () => { dragging = true; });
+  $("seek").addEventListener("input", () => {
+    dragging = true;
+    $("seek").style.setProperty("--p", ($("seek").value / 10) + "%");
+  });
   $("seek").addEventListener("change", () => {
     dragging = false;
     let g = Math.round(($("seek").value / 1000) * (S.length - 1));
@@ -234,6 +287,7 @@
   $("prev").addEventListener("click", prev);
   $("next").addEventListener("click", next);
   $("play").addEventListener("click", toggle);
+  $("stop").addEventListener("click", stop);
   $("speed").addEventListener("change", () => {
     rate = parseFloat($("speed").value);
     audio.defaultPlaybackRate = rate; audio.playbackRate = rate;

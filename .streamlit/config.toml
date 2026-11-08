@@ -6,3 +6,11 @@ address = "127.0.0.1"
 
 [browser]
 gatherUsageStats = false
+
+[theme]
+# NickReader-stilen: orange, grått och svart på varm botten
+base = "light"
+primaryColor = "#F7941D"
+backgroundColor = "#FFF8EC"
+secondaryBackgroundColor = "#FFE9C2"
+textColor = "#111111"

@@ -4,6 +4,7 @@ Starta från projektmappen:
     streamlit run src/app.py
 """
 
+import base64
 import json
 from pathlib import Path
 
@@ -14,21 +15,68 @@ import chunks
 from pdf_text import PDF_DIR
 from tts import DEFAULT_VOICE, american_voices
 
-READER_HTML = Path(__file__).with_name("reader.html")
+SRC_DIR = Path(__file__).resolve().parent
+UI_DIR = SRC_DIR.parent / "assets" / "ui"
+READER_HTML = SRC_DIR / "reader.html"
+ICON_NAMES = ["play", "pause", "stop", "prev", "next"]
 
-st.set_page_config(page_title="NickReader", page_icon="🎧", layout="centered")
+st.set_page_config(page_title="NickReader", page_icon=str(UI_DIR / "play.png"), layout="centered")
+
+# Tjocka svarta konturer och "knappskuggor", i samma stil som loggan och knapparna
+st.markdown(
+    """
+    <style>
+      [data-testid="stSelectbox"] [role="group"] {
+        border: 3px solid #111 !important; border-radius: 14px !important;
+        background: #fff !important; font-weight: 600;
+      }
+      [data-testid="stSelectbox"] input { font-weight: 600; }
+      .stButton > button {
+        border: 3px solid #111; border-radius: 14px; font-weight: 800;
+        box-shadow: 0 5px 0 #111; transition: transform .08s, box-shadow .08s;
+      }
+      .stButton > button:hover { border-color: #111; filter: brightness(1.05); }
+      .stButton > button:active { transform: translateY(4px); box-shadow: 0 1px 0 #111; }
+      [data-testid="stCaptionContainer"] { font-weight: 600; }
+      [data-testid="stImage"] { width: 100% !important; display: flex; justify-content: center; }
+      [data-testid="stImageContainer"] { margin: 0 auto; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+@st.cache_data(show_spinner=False)
+def load_icons() -> dict[str, str]:
+    """Läser knappbilderna och gör om dem till data-URL:er som spelaren kan visa."""
+    icons = {}
+    for name in ICON_NAMES:
+        encoded = base64.b64encode((UI_DIR / f"{name}.png").read_bytes()).decode("ascii")
+        icons[name] = "data:image/png;base64," + encoded
+    return icons
+
+
+@st.cache_data(show_spinner=False)
+def load_logo() -> str:
+    """Loggan som data-URL, så att den kan centreras i sidan."""
+    encoded = base64.b64encode((UI_DIR / "logo.png").read_bytes()).decode("ascii")
+    return "data:image/png;base64," + encoded
 
 
 def render_reader(info: dict) -> None:
     """Visar spelaren (HTML och JavaScript) som hämtar ljudbitarna medan de görs."""
-    payload = {"baseUrl": info["base_url"], "sentences": info["sentences"]}
+    payload = {"baseUrl": info["base_url"], "sentences": info["sentences"], "icons": load_icons()}
     # "</" escapas så att texten aldrig kan avsluta script-taggen i förtid
     data = json.dumps(payload).replace("</", "<\\/")
     html = READER_HTML.read_text(encoding="utf-8").replace("__DATA__", data)
-    components.html(html, height=680)
+    components.html(html, height=700)
 
 
-st.title("🎧 NickReader")
+st.markdown(
+    f'<div style="text-align:center"><img src="{load_logo()}" alt="NickReader" '
+    'style="width:360px;max-width:100%"></div>',
+    unsafe_allow_html=True,
+)
 
 PDF_DIR.mkdir(exist_ok=True)
 pdf_files = sorted(PDF_DIR.glob("*.pdf"))
