@@ -1,0 +1,22 @@
+# Virtuell miljö
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Hemligheter (API-nycklar mm) - checkas aldrig in
+.env
+.env.*
+
+# Genererat ljud och temporära filer
+*.aiff
+*.m4a
+*.mp3
+*.wav
+
+# macOS
+.DS_Store
