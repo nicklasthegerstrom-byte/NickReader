@@ -12,6 +12,9 @@ __pycache__/
 .env
 .env.*
 
+# Dina PDF-filer (kan vara skyddat material), hålls utanför git
+pdf_in/*.pdf
+
 # Genererat ljud och temporära filer
 *.aiff
 *.m4a
@@ -20,3 +23,6 @@ __pycache__/
 
 # macOS
 .DS_Store
+
+# Röstmodeller (stora filer, hämtas separat)
+models/
